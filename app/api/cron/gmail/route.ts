@@ -192,7 +192,8 @@ export async function POST(req: NextRequest) {
         }
 
         // Create calendar event
-        const attendees = (proposal.attendees || []).map((a) => ({ email: a.email, displayName: a.name }));
+        const attendeeInputs = (proposal.attendees && proposal.attendees.length > 0 ? proposal.attendees : candidates);
+        const attendees = attendeeInputs.map((a) => ({ email: a.email, displayName: a.name }));
         const insert = await calendar.events.insert({
           calendarId: 'primary',
           sendUpdates: 'all',
@@ -218,7 +219,7 @@ export async function POST(req: NextRequest) {
             title: proposal.title,
             start: new Date(startISO),
             end: new Date(endISO),
-            attendees: proposal.attendees || [],
+            attendees: attendeeInputs || [],
             sourceSummary: subject,
           },
         });
