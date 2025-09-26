@@ -1,57 +1,62 @@
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { ProcessEmailsButton } from './ProcessEmailsButton';
+import { CronStatus } from './CronStatus';
 
-export default async function Dashboard({ searchParams }: { searchParams?: { page?: string } }) {
+export default async function Dashboard() {
   const session = await auth();
-  if (!session?.user?.id) redirect('/');
+  if (!session?.user) redirect('/');
 
-  const page = Number((searchParams?.page as string) || '1') || 1;
-  const pageSize = 20;
-  const skip = (page - 1) * pageSize;
-
-  const [events, total] = await Promise.all([
-    prisma.calendarEvent.findMany({
-      where: { userId: session.user.id },
-      orderBy: { start: 'desc' },
-      skip,
-      take: pageSize,
-    }),
-    prisma.calendarEvent.count({ where: { userId: session.user.id } }),
-  ]);
-
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // Save authenticated user for dev cron
+  if (process.env.NODE_ENV === 'development' && session?.user?.email && (session as any).accessToken && (session as any).refreshToken) {
+    const { saveAuthenticatedUser } = await import('@/lib/userManager');
+    await saveAuthenticatedUser(
+      session.user.email,
+      (session as any).accessToken,
+      (session as any).refreshToken
+    );
+  }
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Created Events</h1>
-        <Link href="/" className="text-sm underline">Home</Link>
-      </div>
+    <div className="min-h-screen bg-white">
+      {/* Top Navigation */}
+      <nav className="flex justify-end items-center p-6 gap-4">
+        <Link
+          href="/api/auth/signout"
+          className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          sign out
+        </Link>
+        <a
+          href="https://calendar.google.com"
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          open gcal
+        </a>
+        <Link
+          href="/about"
+          className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          about
+        </Link>
+      </nav>
 
-      {events.length === 0 ? (
-        <div className="text-gray-600">No events yet. The cron will process your Inbox and create relevant events automatically.</div>
-      ) : (
-        <ul className="space-y-4">
-          {events.map((e) => (
-            <li key={e.id} className="rounded border p-4">
-              <div className="font-medium">{e.title}</div>
-              <div className="text-sm text-gray-600">{new Date(e.start).toLocaleString()} — {new Date(e.end).toLocaleString()}</div>
-              <div className="text-sm text-gray-600">Thread: <code>{e.gmailThreadId}</code></div>
-              <div className="mt-2 flex gap-3 text-sm">
-                <a className="underline" href={e.htmlLink} target="_blank" rel="noreferrer">Open in Google Calendar</a>
-                <a className="underline" href={`https://mail.google.com/mail/u/0/#inbox/${e.gmailThreadId}`} target="_blank" rel="noreferrer">Open Gmail thread</a>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* Main Content */}
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 pb-16">
+        <div className="text-center space-y-8 w-full max-w-2xl">
+          <h1 className="text-5xl font-light text-gray-900 tracking-tight">
+            put it on the gcal
+          </h1>
 
-      <div className="flex items-center gap-2 mt-6">
-        <Link aria-disabled={page <= 1} className={`px-3 py-1 rounded border ${page <= 1 ? 'pointer-events-none opacity-50' : ''}`} href={`/dashboard?page=${Math.max(1, page - 1)}`}>Prev</Link>
-        <div className="text-sm">Page {page} / {totalPages}</div>
-        <Link aria-disabled={page >= totalPages} className={`px-3 py-1 rounded border ${page >= totalPages ? 'pointer-events-none opacity-50' : ''}`} href={`/dashboard?page=${Math.min(totalPages, page + 1)}`}>Next</Link>
+          <CronStatus />
+
+          <div className="pt-4 pb-8">
+            <ProcessEmailsButton />
+          </div>
+        </div>
       </div>
     </div>
   );
