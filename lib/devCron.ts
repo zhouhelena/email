@@ -1,6 +1,7 @@
 import { addCronLog } from './cronLog';
 
 let cronInterval: NodeJS.Timeout | null = null;
+let isRunning = false;
 
 export function startDevCron() {
   if (process.env.NODE_ENV !== 'development') {
@@ -8,14 +9,26 @@ export function startDevCron() {
     return;
   }
 
-  if (cronInterval) {
-    console.log('[DEV-CRON] Dev cron already running');
+  if (cronInterval || isRunning) {
+    console.log('[DEV-CRON] Dev cron already running, skipping');
     return;
+  }
+
+  if (cronInterval) {
+    console.log('[DEV-CRON] Clearing existing cron interval');
+    clearInterval(cronInterval);
+    cronInterval = null;
   }
 
   console.log('[DEV-CRON] Starting development cron job (every 5 minutes)');
 
   const runCronJob = async () => {
+    if (isRunning) {
+      console.log('[DEV-CRON] ⚠️  Cron job already running, skipping this execution');
+      return;
+    }
+
+    isRunning = true;
     const timestamp = new Date().toISOString();
     console.log(`[DEV-CRON] 🕒 Dev cron job triggered at ${timestamp}`);
 
@@ -85,13 +98,15 @@ export function startDevCron() {
         status: 'error',
         message: `Dev cron job failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       });
+    } finally {
+      isRunning = false;
     }
   };
 
-  // Run immediately on start
-  runCronJob();
+  // Don't run immediately, wait for the interval
+  console.log('[DEV-CRON] Cron job scheduled, first run in 5 minutes');
 
-  // Then run every 5 minutes (300000ms)
+  // Run every 5 minutes (300000ms)
   cronInterval = setInterval(runCronJob, 300000);
 }
 
@@ -101,6 +116,7 @@ export function stopDevCron() {
     clearInterval(cronInterval);
     cronInterval = null;
   }
+  isRunning = false;
 }
 
 // Auto-start in development
